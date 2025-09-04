@@ -8,7 +8,7 @@
     "node": "20.x",
     "npm": "10.x"
   },
-  "scripts": {
+ "scripts": {
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -24,7 +24,9 @@
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "postinstall": "prisma generate",
+    "migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
