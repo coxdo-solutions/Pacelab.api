@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  password        String
+  name            String?
+  role            Role             @default(STUDENT)
+  status          UserStatus       @default(ACTIVE)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  courses         Course[]         @relation("InstructorCourses")
+  enrollments     Enrollment[]
+  lessonProgress  LessonProgress[]
+  messagesRecv    Message[]        @relation("ReceivedMessages")
+  messagesSent    Message[]        @relation("SentMessages")
+  progresses      Progress[]
+  assignedCourses Course[]         @relation("UserAssignedCourses")
+
+  @@index([email])
+}
+
+model Course {
+  id            String       @id @default(uuid())
+  title         String
+  description   String?
+  thumbnail     String?
+  category      String?
+  level         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  instructorId  String?
+  instructor    User?        @relation("InstructorCourses", fields: [instructorId], references: [id])
+  enrollments   Enrollment[]
+  modules       Module[]     @relation("CourseModules")
+  assignedUsers User[]       @relation("UserAssignedCourses")
+
+  @@index([title])
+  @@index([category])
+  @@index([level])
+}
+
+model Module {
+  id        String   @id @default(uuid())
+  title     String
+  order     Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  courseId  String
+  lessons   Lesson[] @relation("ModuleLessons")
+  course    Course   @relation("CourseModules", fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, order])
+  @@index([courseId])
+}
+
+model Lesson {
+  id                   String           @id @default(uuid())
+  title                String
+  videoUrl             String
+  youtubeId            String?
+  description          String?
+  duration             Int?
+  order                Int              @default(1)
+  isPreview            Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  youtubePrivacyStatus String?
+  youtubeEmbeddable    Boolean?
+  youtubePublishedAt   DateTime?
+  youtubeChannelTitle  String?
+  youtubeViewCount     Int?
+  moduleId             String
+  module               Module           @relation("ModuleLessons", fields: [moduleId], references: [id], onDelete: Cascade)
+  lessonProgress       LessonProgress[]
+  messages             Message[]
+  progresses           Progress[]
+
+  @@unique([order, moduleId])
+  @@index([moduleId])
+  @@index([youtubeId])
+}
+
+model LessonProgress {
+  userId        String
+  lessonId      String
+  progress      Int       @default(0)
+  lastWatchedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lesson        Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, lessonId])
+  @@index([lessonId])
+}
+
+model Enrollment {
+  id        String   @id @default(uuid())
+  userId    String
+  courseId  String
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([userId])
+}
+
+model Progress {
+  id             String   @id @default(uuid())
+  userId         String
+  lessonId       String
+  completed      Boolean  @default(false)
+  watchedSeconds Int      @default(0)
+  updatedAt      DateTime @updatedAt
+  lesson         Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([lessonId])
+  @@index([userId])
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  content    String
+  createdAt  DateTime @default(now())
+  senderId   String
+  receiverId String?
+  lessonId   String?
+  lesson     Lesson?  @relation(fields: [lessonId], references: [id])
+  receiver   User?    @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([lessonId])
+}
+
+enum Role {
+  ADMIN
+  INSTRUCTOR
+  STUDENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
