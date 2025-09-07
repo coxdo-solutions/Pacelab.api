@@ -1,24 +1,22 @@
+// src/youtube/youtube.controller.ts
 import {
   BadRequestException,
-  Body,
   Controller,
   Delete,
   Get,
   Param,
   Post,
   Query,
-  UploadedFile,
-  UseInterceptors,
   Req,
   Res,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { YoutubeService } from './youtube.service';
-import { youtubeMulterOptions } from './youtube.multer';
+
+import { YoutubeService, YouTubeVideo } from './youtube.service';
+
 import { Request, Response } from 'express';
 import Busboy from 'busboy';
 
-// ✅ helper to stringify unknown errors
+// helper to stringify unknown errors
 function getErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   if (typeof e === 'string') return e;
@@ -29,28 +27,47 @@ function getErrorMessage(e: unknown): string {
 export class YoutubeController {
   constructor(private readonly youtubeService: YoutubeService) {}
 
-  // 🔎 Search YouTube videos
   @Get('search')
-  async search(@Query('q') q: string, @Query('maxResults') maxResults = 5) {
+  async search(@Query('q') q: string, @Query('maxResults') maxResults = 5): Promise<YouTubeVideo[]>  {
     if (!q?.trim()) throw new BadRequestException('Missing query "q"');
     return this.youtubeService.searchVideos(q, Number(maxResults));
   }
 
-  // 📹 Get video details (comma-separated ids)
   @Get('videos')
-  async getVideos(@Query('ids') ids: string) {
+  async getVideos(@Query('ids') ids: string): Promise<YouTubeVideo[]> {
     if (!ids?.trim()) throw new BadRequestException('Missing "ids"');
     return this.youtubeService.getVideosDetails(ids);
   }
 
-  // 📂 Get playlist videos
   @Get('playlist')
-  async getPlaylist(@Query('id') id: string, @Query('maxResults') maxResults = 5) {
+ async getPlaylist(@Query('id') id: string, @Query('maxResults') maxResults = 5): Promise<YouTubeVideo[]>  {
     if (!id?.trim()) throw new BadRequestException('Missing playlist "id"');
     return this.youtubeService.getPlaylistVideos(id, Number(maxResults));
   }
 
-  // ✅ (A) Direct stream upload (no disk)
+  @Get('auth/url')
+  getAuthUrl(@Res() res: Response) {
+    try {
+      const url = this.youtubeService.getAuthUrl();
+      return res.json({ url });
+    } catch (err) {
+      return res.status(500).json({ message: 'Failed to generate auth url', error: getErrorMessage(err) });
+    }
+  }
+
+  @Get('auth/callback')
+  async authCallback(@Req() req: Request, @Res() res: Response) {
+    const code = req.query.code as string | undefined;
+    if (!code) return res.status(400).send('Missing code');
+    try {
+      await this.youtubeService.exchangeCodeForToken(code, 'owner');
+      return res.send('YouTube connected. You can close this window.');
+    } catch (err) {
+      console.error('Auth callback error', err);
+      return res.status(500).send('Failed to exchange code for token');
+    }
+  }
+
   @Post('upload/stream')
   async uploadStream(@Req() req: Request, @Res() res: Response) {
     const bb = Busboy({ headers: req.headers });
@@ -59,7 +76,7 @@ export class YoutubeController {
     let privacyStatus: 'public' | 'unlisted' | 'private' = 'unlisted';
     let fileFound = false;
 
-    const done = new Promise<void>((resolve, reject) => {
+    const done = new Promise<void>((resolve) => {
       bb.on('field', (name, val) => {
         if (name === 'title') title = val;
         else if (name === 'description') description = val;
@@ -67,38 +84,77 @@ export class YoutubeController {
           privacyStatus = val as any;
       });
 
-      bb.on('file', (_name, fileStream) => {
+      bb.on('file', async (_name, fileStream) => {
         fileFound = true;
-        const { stream, done } = this.youtubeService.createUploadStream({ title, description, privacyStatus });
-        fileStream.pipe(stream);
-        done
-          .then(({ data }) => {
-            res.json({
-              videoId: data.id,
-              watchUrl: `https://www.youtube.com/watch?v=${data.id}`,
-              embedUrl: `https://www.youtube.com/embed/${data.id}`,
-              title: data.snippet?.title ?? title,
-              description: data.snippet?.description ?? description,
-              privacyStatus: data.status?.privacyStatus ?? privacyStatus,
+        try {
+          // <-- AWAIT the async createUploadStream call
+        const { stream, done } = await this.youtubeService.createUploadStream({ title, description, privacyStatus });
+
+          fileStream.pipe(stream);
+
+          done
+            .then((result: any) => {
+              const normalized = {
+                videoId: result?.videoId ?? result?.data?.id,
+                watchUrl:
+                  result?.watchUrl ??
+                  (result?.videoId ? `https://www.youtube.com/watch?v=${result.videoId}` :
+                   result?.data?.id ? `https://www.youtube.com/watch?v=${result.data.id}` : undefined),
+                embedUrl:
+                  result?.embedUrl ??
+                  (result?.videoId ? `https://www.youtube.com/embed/${result.videoId}` :
+                   result?.data?.id ? `https://www.youtube.com/embed/${result.data.id}` : undefined),
+                title: result?.title ?? result?.data?.snippet?.title ?? title,
+                description: result?.description ?? result?.data?.snippet?.description ?? description,
+                privacyStatus: result?.privacyStatus ?? result?.data?.status?.privacyStatus ?? privacyStatus,
+              };
+
+              res.json(normalized);
+              resolve();
+            })
+            .catch((err: any) => {
+              const respData = err?.response?.data ?? err?.message ?? String(err);
+              const isInvalidGrant =
+                err?.code === 'REFRESH_TOKEN_INVALID' ||
+                String(respData).toLowerCase().includes('invalid_grant') ||
+                String(respData).toLowerCase().includes('refresh_token');
+
+              if (isInvalidGrant) {
+                let authUrl: string | null = null;
+                try { authUrl = this.youtubeService.getAuthUrl(); } catch (_) { authUrl = null; }
+
+                if (!res.headersSent) {
+                  return res.status(401).json({
+                    message: 'REFRESH_TOKEN_INVALID',
+                    reason: 'reauth_required',
+                    authUrl,
+                    error: getErrorMessage(err),
+                  });
+                }
+              }
+
+              if (!res.headersSent) {
+                res.status(500).json({
+                  message: 'YouTube upload failed',
+                  error: getErrorMessage(err),
+                });
+              }
             });
-            resolve();
-          })
-          .catch((err: unknown) => {
-            if (!res.headersSent) {
-              res.status(500).json({
-                message: 'YouTube upload failed',
-                error: getErrorMessage(err),
-              });
-            }
-            reject(err);
-          });
+        } catch (err) {
+          if (!res.headersSent) {
+            res.status(500).json({
+              message: 'Failed to create upload stream',
+              error: getErrorMessage(err),
+            });
+          }
+        }
       });
 
       bb.on('close', () => {
-        if (!fileFound) {
-          if (!res.headersSent) res.status(400).json({ message: 'No video file found in form-data' });
-          reject(new BadRequestException('No video file found'));
+        if (!fileFound && !res.headersSent) {
+          res.status(400).json({ message: 'No video file found in form-data' });
         }
+        resolve();
       });
 
       bb.on('error', (err: unknown) => {
@@ -108,7 +164,7 @@ export class YoutubeController {
             error: getErrorMessage(err),
           });
         }
-        reject(err);
+        resolve();
       });
     });
 
@@ -116,32 +172,12 @@ export class YoutubeController {
     return done;
   }
 
-  // ✅ (B) Disk upload → YouTube (fallback)
-  @Post('upload')
-  @UseInterceptors(FileInterceptor('video', youtubeMulterOptions))
-  async uploadDisk(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('title') title?: string,
-    @Body('description') description?: string,
-    @Body('privacyStatus') privacyStatus?: 'public' | 'unlisted' | 'private',
-  ) {
-    if (!file) throw new BadRequestException('No video file provided (field name: "video")');
-    return this.youtubeService.uploadVideo({
-      path: file.path,
-      title,
-      description,
-      privacyStatus,
-    });
-  }
-
-  // 🟢 Check processing/embeddable status
   @Get('videos/:id/status')
   async status(@Param('id') id: string) {
     if (!id?.trim()) throw new BadRequestException('Missing video id');
     return this.youtubeService.getUploadStatus(id);
   }
 
-  // 🗑️ Delete a YouTube video
   @Delete('videos/:id')
   async remove(@Param('id') id: string) {
     if (!id?.trim()) throw new BadRequestException('Missing video id');

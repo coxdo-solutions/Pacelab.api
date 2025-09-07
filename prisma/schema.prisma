@@ -131,6 +131,14 @@ model Progress {
   @@index([userId])
 }
 
+model OAuthToken {
+  id           Int      @id @default(autoincrement())
+  ownerId      String   @unique
+  refreshToken String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model Message {
   id         String   @id @default(uuid())
   content    String
