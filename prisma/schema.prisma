@@ -92,16 +92,17 @@ model Lesson {
 model LessonProgress {
   userId        String
   lessonId      String
-  progress      Int       @default(0)
+  progress      ProgressStatus @default(NOT_STARTED)
   lastWatchedAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  lesson        Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  lesson        Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, lessonId])
   @@index([lessonId])
 }
+
 
 model Enrollment {
   id        String   @id @default(uuid())
@@ -164,4 +165,10 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  STARTED
+  COMPLETED
 }
