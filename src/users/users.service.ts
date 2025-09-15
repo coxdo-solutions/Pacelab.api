@@ -8,6 +8,9 @@ import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
+  findCourseByName(courseName: any) {
+    throw new Error('Method not implemented.');
+  }
   constructor(private readonly prisma: PrismaService) {}
 
   /** ✅ Create User */
@@ -202,5 +205,35 @@ async getUserCourses(userId: string) {
       },
     });
   }
+
+  async getCourseIdsByNames(names: string[]): Promise<string[]> {
+  if (!names.length) return [];
+
+  const courses = await this.prisma.course.findMany({
+    where: {
+      title: { in: names },
+    },
+    select: { id: true, title: true },
+  });
+
+  // Return IDs that match the provided names
+  return courses.map((c) => c.id);
+}
+
+/** Assign courses to a user (overwrites previous assignments) */
+async assignCoursesToUser(userId: string, courseIds: string[]) {
+  return this.prisma.user.update({
+    where: { id: userId },
+    data: {
+      assignedCourses: {
+        set: courseIds.map((id) => ({ id })),
+      },
+    },
+    select: {
+      id: true,
+      assignedCourses: { select: { id: true, title: true } },
+    },
+  });
+}
 }
 
