@@ -26,3 +26,12 @@ export class CreateUserDto {
   assignedCourseIds?: string[];
 }
 
+export interface BulkCreateUserDto {
+  name: string;
+  email: string;
+  password: string;
+  role?: string;
+  assignedCourseIds?: string[];
+  assignedCourseNames?: string; 
+}
+
