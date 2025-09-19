@@ -92,7 +92,7 @@ model Lesson {
 model LessonProgress {
   userId        String
   lessonId      String
-  progress      Int       @default(0)
+  completed     Boolean   @default(false)
   lastWatchedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

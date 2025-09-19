@@ -1,12 +1,10 @@
-import { IsString, IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
 
 export class UpdateProgressDto {
   @IsString()
   lessonId!: string;
 
-  @IsNumber()
+  @IsBoolean()
   @IsOptional()
-  @Min(0)
-  @Max(100)
-  progress?: number;  // 0–100%
+  completed?: boolean; // true = completed, false = not completed
 }

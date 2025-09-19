@@ -87,20 +87,11 @@ export class LessonsService {
   async updateProgress(userId: string, dto: UpdateProgressDto) {
     const { lessonId } = dto;
 
-    // Coerce progress safely (handles number, numeric string, or undefined)
-    const raw = (dto as any).progress;
-    const num = typeof raw === 'number' ? raw : Number(raw);
-    const safe = Number.isFinite(num) ? num : 0;
-
-    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
-    if (!lesson) throw new NotFoundException('Lesson not found');
-
-    const normalized = Math.max(0, Math.min(100, Math.round(safe)));
-
+    const completed = Boolean(dto.completed);
     return this.prisma.lessonProgress.upsert({
       where: { userId_lessonId: { userId, lessonId } },
-      update: { progress: normalized, lastWatchedAt: new Date() },
-      create: { userId, lessonId, progress: normalized, lastWatchedAt: new Date() },
+      update: { completed, lastWatchedAt: new Date() },
+      create: { userId, lessonId, completed, lastWatchedAt: new Date() },
     });
   }
 }
