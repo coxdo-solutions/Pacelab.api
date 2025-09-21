@@ -1,10 +1,18 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsEnum} from 'class-validator';
+
+export enum LessonProgressStatus{
+  NOT_STARTED = 'NOT_STARTED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+}
 
 export class UpdateProgressDto {
   @IsString()
   lessonId!: string;
 
-  @IsBoolean()
+  @IsEnum(LessonProgressStatus)
   @IsOptional()
-  completed?: boolean; // true = completed, false = not completed
+  status?: LessonProgressStatus;
+
+
 }

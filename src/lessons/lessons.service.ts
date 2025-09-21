@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateProgressDto } from './dto/update-progress.dto';
+import { UpdateProgressDto, LessonProgressStatus } from './dto/update-progress.dto';
 import { CreateLessonDto } from '../courses/dto/create-lesson.dto';
 import { extractYouTubeId } from './utils/youtube.util';
 import { YoutubeService } from '../youtube/youtube.service';
@@ -85,13 +85,13 @@ export class LessonsService {
   }
 
   async updateProgress(userId: string, dto: UpdateProgressDto) {
-    const { lessonId } = dto;
+    const { lessonId , status } = dto;
 
-    const completed = Boolean(dto.completed);
+    const progressStatus = status || LessonProgressStatus.IN_PROGRESS;
     return this.prisma.lessonProgress.upsert({
       where: { userId_lessonId: { userId, lessonId } },
-      update: { completed, lastWatchedAt: new Date() },
-      create: { userId, lessonId, completed, lastWatchedAt: new Date() },
+      update: { status : progressStatus, lastWatchedAt: new Date() },
+      create: { userId, lessonId, status : progressStatus, lastWatchedAt: new Date() },
     });
   }
 }

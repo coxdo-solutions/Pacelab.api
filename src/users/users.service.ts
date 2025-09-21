@@ -8,7 +8,7 @@ import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
-  findCourseByName(courseName: any) {
+   findCourseByName(courseName: any) {
     throw new Error('Method not implemented.');
   }
   constructor(private readonly prisma: PrismaService) {}
@@ -232,6 +232,16 @@ async assignCoursesToUser(userId: string, courseIds: string[]) {
     select: {
       id: true,
       assignedCourses: { select: { id: true, title: true } },
+    },
+  });
+}
+
+async createLoginActivity({ userId, ipAddress, userAgent }: { userId: string; ipAddress?: string; userAgent?: string }) {
+  return this.prisma.loginActivity.create({
+    data: {
+      userId,
+      ipAddress,
+      userAgent,
     },
   });
 }

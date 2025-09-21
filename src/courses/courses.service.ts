@@ -83,6 +83,7 @@ export class CoursesService {
         title: dto.title,
         description: dto.description,
         thumbnail: dto.thumbnail,
+        isActive:dto.isActive
       },
       include: { _count: { select: { modules: true, enrollments: true } } },
     });

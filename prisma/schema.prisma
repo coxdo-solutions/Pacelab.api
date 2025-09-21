@@ -24,6 +24,7 @@ model User {
   messagesSent    Message[]        @relation("SentMessages")
   progresses      Progress[]
   assignedCourses Course[]         @relation("UserAssignedCourses")
+  loginActivities LoginActivity[]
 
   @@index([email])
 }
@@ -42,6 +43,7 @@ model Course {
   enrollments   Enrollment[]
   modules       Module[]     @relation("CourseModules")
   assignedUsers User[]       @relation("UserAssignedCourses")
+  isActive      Boolean      @default(true)
 
   @@index([title])
   @@index([category])
@@ -92,7 +94,7 @@ model Lesson {
 model LessonProgress {
   userId        String
   lessonId      String
-  completed     Boolean   @default(false)
+  status        LessonProgressStatus  @default(NOT_STARTED)
   lastWatchedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -154,6 +156,17 @@ model Message {
   @@index([lessonId])
 }
 
+model LoginActivity {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loginAt    DateTime @default(now())
+  ipAddress  String?
+  userAgent  String?
+
+  @@index([userId])
+}
+
 enum Role {
   ADMIN
   INSTRUCTOR
@@ -164,4 +177,10 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+}
+
+enum LessonProgressStatus{
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
 }
