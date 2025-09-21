@@ -46,7 +46,7 @@ export class AuthService {
    * Sign a JWT and store session in Redis.
    * Accepts either a full user record or a minimal user-like object containing id/email/role.
    */
-  async login(user: any) {
+  async login(user: any, req?: any) {
     if (!user || !user.id) {
       throw new UnauthorizedException('Invalid user for login');
     }
@@ -66,6 +66,13 @@ export class AuthService {
     } catch (err) {
       console.warn('⚠️ Redis save failed (continuing):', (err as any)?.message ?? err);
     }
+
+    // Log login activity
+    await this.usersService.createLoginActivity({
+      userId: user.id,
+      ipAddress: req?.ip,
+      userAgent: req?.headers?.['user-agent'],
+    });
 
     return {
       access_token: token,
