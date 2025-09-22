@@ -144,49 +144,106 @@ export class UsersService {
   }
 
   /** ✅ Get courses assigned/enrolled to a user (with modules and lessons) */
-  /** ✅ Get courses assigned/enrolled to a user (with modules and lessons) */
-async getUserCourses(userId: string) {
-  const userWithCourses = await this.prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      // include the relation explicitly via SELECT
-      assignedCourses: {
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          modules: {
-            orderBy: { order: 'asc' },
-            select: {
-              id: true,
-              title: true,
-              order: true,
-              lessons: {
-                orderBy: { order: 'asc' },
-                select: {
-                  id: true,
-                  title: true,
-                  // ⚠️ remove 'content' because your Lesson model doesn't have it.
-                  // If you have another field (e.g., 'videoId' or 'url'), add it here.
-                  duration: true,
-                  order: true,
+  async getUserCourses(userId: string) {
+    const userWithCourses = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        // include the relation explicitly via SELECT
+        assignedCourses: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            modules: {
+              orderBy: { order: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                order: true,
+                lessons: {
+                  orderBy: { order: 'asc' },
+                  select: {
+                    id: true,
+                    title: true,
+                    duration: true,
+                    order: true,
+                    videoUrl: true,
+                    youtubeId: true,
+                    // Include lesson progress for this specific user
+                    lessonProgress: {
+                      where: { userId: userId },
+                      select: {
+                        status: true,
+                        lastWatchedAt: true,
+                      },
+                    },
+                  },
                 },
               },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!userWithCourses) {
-    throw new NotFoundException(`User with ID ${userId} not found`);
+    if (!userWithCourses) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    // Transform the data to include totals and progress
+    const coursesWithProgress = userWithCourses.assignedCourses.map(course => {
+      let totalLessons = 0;
+      let completedLessons = 0;
+
+      const modulesWithProgress = course.modules.map(module => {
+        const lessonsWithProgress = module.lessons.map(lesson => {
+          totalLessons++;
+
+          const progress = lesson.lessonProgress[0]; // Should be 0 or 1 since we filtered by userId
+          const isCompleted = progress?.status === 'COMPLETED';
+
+          if (isCompleted) {
+            completedLessons++;
+          }
+
+          return {
+            id: lesson.id,
+            title: lesson.title,
+            duration: lesson.duration,
+            order: lesson.order,
+            videoUrl: lesson.videoUrl,
+            youtubeId: lesson.youtubeId,
+            status: progress?.status || 'NOT_STARTED',
+            lastWatchedAt: progress?.lastWatchedAt || null,
+            isCompleted,
+          };
+        });
+
+        return {
+          id: module.id,
+          title: module.title,
+          order: module.order,
+          lessons: lessonsWithProgress,
+        };
+      });
+
+      const progressPercentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+
+      return {
+        id: course.id,
+        title: course.title,
+        description: course.description,
+        totalLessons,
+        completedLessons,
+        progressPercentage,
+        modules: modulesWithProgress,
+      };
+    });
+
+    return coursesWithProgress;
   }
-  return userWithCourses.assignedCourses;
-}
-
 
   /** ✅ Delete User */
   async remove(id: string) {
